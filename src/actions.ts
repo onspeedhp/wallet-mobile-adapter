@@ -141,7 +141,6 @@ export const signAndExecuteTransaction = async (
       action: {
         type: SmartWalletAction.CreateChunk,
         args: {
-          policyInstruction: null,
           cpiInstructions: payload.instructions,
         }
       },
@@ -200,7 +199,6 @@ export const signAndExecuteTransaction = async (
             {
               type: SmartWalletAction.CreateChunk,
               args: {
-                policyInstruction: null,
                 cpiInstructions: payload.instructions,
               }
             },

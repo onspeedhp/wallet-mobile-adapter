@@ -15,7 +15,8 @@ import {
   SmartWalletActionArgs,
   SmartWalletAction,
   asCredentialHash,
-  asPasskeyPublicKey
+  asPasskeyPublicKey,
+  ensureChunkExist
 } from '../../contract';
 import { getFeePayer, signAndExecuteTransaction } from '../paymaster';
 import { logger } from '../logger';
@@ -109,8 +110,8 @@ export const createWalletActions = (
 
       // If passkeyPubkey was missing (e.g. from redirect), update it from on-chain state
       const initialPasskeyPubkey = data.passkeyPubkey;
-      const finalPasskeyPubkey = initialPasskeyPubkey.length === 0 && walletState.passkeyPubkey
-        ? Array.from(walletState.passkeyPubkey)
+      const finalPasskeyPubkey = initialPasskeyPubkey.length === 0 && walletState.passkeyPublicKey
+        ? Array.from(walletState.passkeyPublicKey)
         : initialPasskeyPubkey;
 
       return {
@@ -182,6 +183,13 @@ export const createWalletActions = (
         String(signature),
         'confirmed'
       );
+
+      await ensureChunkExist(
+        lazorProgram.connection,
+        lazorProgram,
+        new anchor.web3.PublicKey(data.smartWallet)
+      );
+
       const addressLookupTables = transactionOptions?.addressLookupTableAccounts || [];
       const executeChunkTransaction = await lazorProgram.executeChunkTxn({
         payer: feePayer,
