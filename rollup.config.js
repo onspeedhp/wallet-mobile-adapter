@@ -1,9 +1,9 @@
-const typescript = require('rollup-plugin-typescript2');
+const typescript = require('@rollup/plugin-typescript');
 const json = require('@rollup/plugin-json');
 const resolve = require('@rollup/plugin-node-resolve');
 const dts = require('rollup-plugin-dts');
-import commonjs from '@rollup/plugin-commonjs';
-import peerDepsExternal from 'rollup-plugin-peer-deps-external';
+const commonjs = require('@rollup/plugin-commonjs');
+const peerDepsExternal = require('rollup-plugin-peer-deps-external');
 
 // Main build
 const mainConfig = {
@@ -63,13 +63,14 @@ const mainConfig = {
     }),
     typescript({
       tsconfig: './tsconfig.json',
-      useTsconfigDeclarationDir: false, // Let the plugin handle it directly
-      tsconfigOverride: {
-        compilerOptions: {
-          declaration: true,
-          declarationDir: 'dist',
-          emitDeclarationOnly: false,
-        },
+      compilerOptions: {
+        // `rollup-plugin-dts` emits the .d.ts bundle in the typesConfig pass,
+        // so the main build only needs JS.
+        declaration: false,
+        declarationMap: false,
+        declarationDir: undefined,
+        emitDeclarationOnly: false,
+        outDir: 'dist',
       },
     }),
   ],

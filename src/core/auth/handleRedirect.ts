@@ -43,6 +43,7 @@ export const handleAuthRedirect = (url: string): WalletInfo | null => {
       expo: parsed.searchParams.get('expo') || '',
       platform: parsed.searchParams.get('platform') || '',
       smartWallet: '',
+      walletPda: '',
       walletDevice: '',
     };
   } catch (err) {

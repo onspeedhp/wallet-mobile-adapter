@@ -5,14 +5,48 @@
  * and imports from the new core & config modules.
  */
 
-import * as anchor from '@coral-xyz/anchor';
+import { Connection, PublicKey } from '@solana/web3.js';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { WalletStateClient, WalletInfo, WalletConfig, ConnectOptions, SignOptions } from '../types';
+import { findVaultPda } from '../program';
+import {
+  WalletStateClient,
+  WalletInfo,
+  WalletConfig,
+  ConnectOptions,
+  SignOptions,
+  AddAuthorityPayload,
+  AuthorizeExecutePayload,
+  AuthorizePayload,
+  CreateSessionPayload,
+  ExecuteDeferredPayload,
+  ReclaimDeferredPayload,
+  RemoveAuthorityPayload,
+  RevokeSessionPayload,
+  SessionSignPayload,
+  SignAndSendTransactionPayload,
+  TransferSolPayload,
+  TxCallbacks,
+} from '../types';
 import { DEFAULT_COMMITMENT, DEFAULTS, STORAGE_KEYS } from '../config';
 import { logger } from '../core/logger';
-import { connectAction, disconnectAction, signAndExecuteTransaction, signMessageAction } from '../actions';
-import { SignAndSendTransactionPayload } from '../types';
+import {
+  addAuthorityEd25519Action,
+  authorizeDeferredAction,
+  authorizeAndExecuteAction,
+  connectAction,
+  createSessionAction,
+  disconnectAction,
+  executeDeferredAction,
+  listAuthoritiesAction,
+  reclaimDeferredAction,
+  removeAuthorityAction,
+  revokeSessionAction,
+  signAndExecuteTransaction,
+  signAndSendWithSessionAction,
+  signMessageAction,
+  transferSolAction,
+} from '../actions';
 // AsyncStorage dynamic import remains unchanged
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let AsyncStorage: any = null;
@@ -78,7 +112,7 @@ export const useWalletStore = create<WalletStateClient>()(
         },
         rpcUrl: DEFAULTS.RPC_ENDPOINT,
       },
-      connection: new anchor.web3.Connection(DEFAULTS.RPC_ENDPOINT!, DEFAULT_COMMITMENT),
+      connection: new Connection(DEFAULTS.RPC_ENDPOINT!, DEFAULT_COMMITMENT),
       isLoading: false,
       isConnecting: false,
       isSigning: false,
@@ -87,7 +121,7 @@ export const useWalletStore = create<WalletStateClient>()(
       setConfig: (config: WalletConfig) => {
         try {
           // Info log removed
-          const connection = new anchor.web3.Connection(
+          const connection = new Connection(
             config.rpcUrl || DEFAULTS.RPC_ENDPOINT!,
             DEFAULT_COMMITMENT
           );
@@ -112,7 +146,7 @@ export const useWalletStore = create<WalletStateClient>()(
       setLoading: (isLoading: boolean) => set({ isLoading }),
       setConnecting: (isConnecting: boolean) => set({ isConnecting }),
       setSigning: (isSigning: boolean) => set({ isSigning }),
-      setConnection: (connection: anchor.web3.Connection) => {
+      setConnection: (connection: Connection) => {
         try {
           set({ connection });
           // Debug log removed
@@ -139,14 +173,57 @@ export const useWalletStore = create<WalletStateClient>()(
       signAndExecuteTransaction: (payload: SignAndSendTransactionPayload, options: SignOptions) =>
         signAndExecuteTransaction(get, set, payload, options),
       signMessage: (message: string, options: SignOptions) => signMessageAction(get, set, message, options),
+      createSession: (payload: CreateSessionPayload, options: SignOptions) =>
+        createSessionAction(get, set, payload, options),
+      revokeSession: (payload: RevokeSessionPayload, options: SignOptions) =>
+        revokeSessionAction(get, set, payload, options),
+      signAndSendWithSession: (payload: SessionSignPayload, options) =>
+        signAndSendWithSessionAction(get, set, payload, options),
+      addAuthorityEd25519: (payload: AddAuthorityPayload, options: SignOptions) =>
+        addAuthorityEd25519Action(get, set, payload, options),
+      removeAuthority: (payload: RemoveAuthorityPayload, options: SignOptions) =>
+        removeAuthorityAction(get, set, payload, options),
+      authorizeAndExecute: (payload: AuthorizeExecutePayload, options: SignOptions) =>
+        authorizeAndExecuteAction(get, set, payload, options),
+      authorizeDeferred: (payload: AuthorizePayload, options: SignOptions) =>
+        authorizeDeferredAction(get, set, payload, options),
+      executeDeferred: (payload: ExecuteDeferredPayload, options?: TxCallbacks) =>
+        executeDeferredAction(get, set, payload, options),
+      reclaimDeferred: (payload: ReclaimDeferredPayload, options?: TxCallbacks) =>
+        reclaimDeferredAction(get, set, payload, options),
+      listAuthorities: () => listAuthoritiesAction(get),
+      transferSol: (payload: TransferSolPayload, options: SignOptions) =>
+        transferSolAction(get, set, payload, options),
     }),
     {
       name: STORAGE_KEYS.WALLET,
       storage: createJSONStorage(() => storage),
+      version: 1,
       partialize: (state: WalletStateClient) => ({
         wallet: state.wallet,
         config: state.config,
       }),
+      /**
+       * v0 → v1: `smartWallet` used to hold the wallet PDA; now it holds the
+       * vault PDA. Derive the vault so persisted users keep working.
+       */
+      migrate: (persisted: any, fromVersion: number) => {
+        if (fromVersion < 1 && persisted?.wallet && !persisted.wallet.walletPda) {
+          try {
+            const oldWalletPda = new PublicKey(persisted.wallet.smartWallet);
+            const [vaultPda] = findVaultPda(oldWalletPda);
+            persisted.wallet = {
+              ...persisted.wallet,
+              smartWallet: vaultPda.toBase58(),
+              walletPda: oldWalletPda.toBase58(),
+            };
+          } catch (err) {
+            logger.error('Failed to migrate persisted wallet v0→v1, clearing:', err);
+            persisted.wallet = null;
+          }
+        }
+        return persisted;
+      },
     }
   )
 );

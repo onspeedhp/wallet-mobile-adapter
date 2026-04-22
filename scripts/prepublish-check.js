@@ -89,7 +89,10 @@ function checkPackageJson() {
 }
 
 function checkSecurity() {
-  return runCommand('npm audit --audit-level=moderate', 'Security audit');
+  return runCommand(
+    'npm audit --audit-level=moderate --omit=dev',
+    'Security audit (production deps only)',
+  );
 }
 
 function checkBuild() {

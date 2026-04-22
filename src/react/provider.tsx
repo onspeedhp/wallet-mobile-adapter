@@ -2,7 +2,7 @@
  * LazorKit Wallet Mobile Adapter - React Provider
  */
 
-import * as anchor from '@coral-xyz/anchor';
+import { Connection } from '@solana/web3.js';
 import React, { useEffect, useMemo } from 'react';
 import { useWalletStore } from './store';
 import { logger } from '../core/logger';
@@ -13,7 +13,10 @@ import { DEFAULTS } from '../config';
 
 global.Buffer = Buffer;
 
-Buffer.prototype.subarray = function subarray(begin: number | undefined, end: number | undefined) {
+// Ensure subarray returns a Buffer (not a plain Uint8Array) so downstream
+// Solana libs that call Buffer-only methods on the result don't blow up.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(Buffer.prototype as any).subarray = function subarray(begin: number | undefined, end: number | undefined) {
   try {
     const result = Uint8Array.prototype.subarray.apply(this, [begin, end]);
     Object.setPrototypeOf(result, Buffer.prototype);
@@ -30,6 +33,7 @@ export const LazorKitProvider = ({
   configPaymaster = {
     paymasterUrl: DEFAULTS.PAYMASTER_URL,
   },
+  rpId = DEFAULTS.RP_ID,
   isDebug = false,
   children,
 }: LazorKitProviderProps): React.JSX.Element => {
@@ -37,44 +41,54 @@ export const LazorKitProvider = ({
 
   useEffect(() => {
     logger.setDebugMode(isDebug);
-    // Debug log removed
   }, [isDebug]);
+
+  const effectiveRpcUrl = rpcUrl || DEFAULTS.RPC_ENDPOINT;
+  const effectivePortalUrl = portalUrl || DEFAULTS.PORTAL_URL;
+  const effectivePaymasterUrl = configPaymaster.paymasterUrl || DEFAULTS.PAYMASTER_URL;
+  const effectiveRpId = rpId || DEFAULTS.RP_ID;
 
   const connection = useMemo(() => {
     try {
-      const conn = new anchor.web3.Connection(rpcUrl!, 'confirmed');
-      return conn;
+      return new Connection(effectiveRpcUrl, 'confirmed');
     } catch (error) {
-      logger.error('Failed to create Solana connection:', error, { rpcUrl });
-      // Warning log removed
-      return new anchor.web3.Connection(DEFAULTS.RPC_ENDPOINT!, 'confirmed');
+      logger.error('Failed to create Solana connection:', error, { rpcUrl: effectiveRpcUrl });
+      return new Connection(DEFAULTS.RPC_ENDPOINT, 'confirmed');
     }
-  }, [rpcUrl]);
+  }, [effectiveRpcUrl]);
 
   useEffect(() => {
     try {
-      // Debug log removed
-
       setConnection(connection);
       setConfig({
-        portalUrl,
+        portalUrl: effectivePortalUrl,
         configPaymaster: {
-          paymasterUrl: configPaymaster.paymasterUrl,
+          paymasterUrl: effectivePaymasterUrl,
           apiKey: configPaymaster.apiKey,
         },
-        rpcUrl
+        rpcUrl: effectiveRpcUrl,
+        rpId: effectiveRpId,
       });
-
-      // Debug log removed
     } catch (error) {
       logger.error('Failed to initialize wallet store:', error, {
-        rpcUrl,
-        portalUrl,
-        configPaymaster,
+        rpcUrl: effectiveRpcUrl,
+        portalUrl: effectivePortalUrl,
+        paymasterUrl: effectivePaymasterUrl,
+        rpId: effectiveRpId,
         isDebug,
       });
     }
-  }, [connection, portalUrl, configPaymaster, rpcUrl, isDebug, setConnection, setConfig]);
+  }, [
+    connection,
+    effectivePortalUrl,
+    effectivePaymasterUrl,
+    configPaymaster.apiKey,
+    effectiveRpcUrl,
+    effectiveRpId,
+    isDebug,
+    setConnection,
+    setConfig,
+  ]);
 
   try {
     return <>{typeof children === 'string' ? <span>{children}</span> : children}</>;
